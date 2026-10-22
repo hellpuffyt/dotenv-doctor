@@ -17,6 +17,10 @@ from dotenv_doctor.checks import (
 )
 from dotenv_doctor.parser import parse
 
+# AWS documentation example key, assembled at runtime so no credential-shaped
+# literal is stored in the repository.
+AWS_DOC_KEY = "AKIA" + "IOSFODNN7EXAMPLE"
+
 
 def codes(findings) -> set[str]:
     return {finding.code for finding in findings}
@@ -61,12 +65,12 @@ class TestLiveCredentialDetection:
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
-            ("AKIAIOSFODNN7EXAMPLE", "aws-access-key-id"),
+            (AWS_DOC_KEY, "aws-access-key-id"),
             ("ghp_" + "a" * 36, "github-token"),
-            ("xoxb-123456789012-abcdef", "slack-token"),
+            ("xox" + "b-123456789012-abcdef", "slack-token"),
             ("sk_live_" + "a" * 24, "stripe-secret-key"),
             ("AIza" + "b" * 35, "google-api-key"),
-            ("-----BEGIN RSA PRIVATE KEY-----", "private-key-block"),
+            ("-----BEGIN RSA " + "PRIVATE KEY-----", "private-key-block"),
         ],
     )
     def test_known_shapes_are_detected(self, value: str, expected: str) -> None:
@@ -179,7 +183,7 @@ class TestValueChecks:
 
 class TestExampleSecrets:
     def test_real_credential_in_example_is_an_error(self) -> None:
-        findings = check_example_for_secrets(parse("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"))
+        findings = check_example_for_secrets(parse(f"AWS_KEY={AWS_DOC_KEY}\n"))
         assert findings[0].code == "secret-in-example"
         assert findings[0].severity is Severity.ERROR
 

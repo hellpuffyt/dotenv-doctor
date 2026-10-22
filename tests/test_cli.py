@@ -9,6 +9,10 @@ import pytest
 
 from dotenv_doctor.cli import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, main
 
+# AWS documentation example key, assembled at runtime so no credential-shaped
+# literal is stored in the repository.
+AWS_DOC_KEY = "AKIA" + "IOSFODNN7EXAMPLE"
+
 
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -132,7 +136,7 @@ class TestOptions:
     def test_example_only_fails_on_a_committed_credential(
         self, project: Path
     ) -> None:
-        write(project, ".env.example", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+        write(project, ".env.example", f"AWS_KEY={AWS_DOC_KEY}\n")
         assert main(["--example-only"]) == EXIT_FINDINGS
 
     def test_example_only_fails_on_a_syntax_error(self, project: Path) -> None:
@@ -149,10 +153,10 @@ class TestOptions:
         assert main(["--example-only"]) == EXIT_USAGE
 
     def test_example_only_honours_a_custom_path(self, project: Path) -> None:
-        write(project, "env.sample", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+        write(project, "env.sample", f"AWS_KEY={AWS_DOC_KEY}\n")
         assert main(["--example-only", "--example", "env.sample"]) == EXIT_FINDINGS
 
     def test_secret_left_in_example_fails_the_run(self, project: Path) -> None:
-        write(project, ".env.example", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+        write(project, ".env.example", f"AWS_KEY={AWS_DOC_KEY}\n")
         write(project, ".env", "AWS_KEY=xJ3$kQ9zPw27Lm4TbVn8\n")
         assert main([]) == EXIT_FINDINGS

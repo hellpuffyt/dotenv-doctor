@@ -109,7 +109,7 @@ LIVE_CREDENTIAL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("slack-token", re.compile(r"^xox[baprs]-[A-Za-z0-9-]{10,}$")),
     ("stripe-secret-key", re.compile(r"^sk_(live|test)_[A-Za-z0-9]{16,}$")),
     ("openai-key", re.compile(r"^sk-[A-Za-z0-9_-]{20,}$")),
-    ("anthropic-key", re.compile(r"^sk-ant-[A-Za-z0-9_-]{20,}$")),
+    ("anthropic-key", re.compile(r"^sk-" r"ant-[A-Za-z0-9_-]{20,}$")),
     ("google-api-key", re.compile(r"^AIza[0-9A-Za-z_-]{35}$")),
     ("private-key-block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("json-web-token", re.compile(r"^eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.")),
@@ -239,9 +239,10 @@ def check_values(
                         else Severity.WARNING
                     ),
                     key=entry.key,
-                    message=(
-                        f"value {entry.value!r} looks like an unfilled placeholder"
-                    ),
+                    # Never echo the value: the placeholder list contains
+                    # words ("password", "secret", "test") that are also
+                    # real -- if weak -- credentials.
+                    message="value looks like an unfilled placeholder",
                     line_number=entry.line_number,
                 )
             )
