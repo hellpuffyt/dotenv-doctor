@@ -16,7 +16,7 @@ with them before your application does.
 $ dotenv-doctor
 .env
   error - DATABASE_URL: declared in the example file but absent here [missing-key]
-  error line 1 API_KEY: value 'changeme' looks like an unfilled placeholder [placeholder-value]
+  error line 1 API_KEY: value looks like an unfilled placeholder [placeholder-value]
   warning line 3 LEGACY_FLAG: set here but missing from the example file [undocumented-key]
 
 2 error(s), 1 warning(s) across 1 file(s)
@@ -59,8 +59,11 @@ your real environment and the contract your repository publishes.
   Slack, Stripe, OpenAI, Anthropic, Google, PEM private keys, JWTs) flagged as
   errors when found in the example file.
 - **A parser that handles the awkward cases** — `export` prefixes, inline
-  comments, `pass#word`, single vs double quoting with escapes, values
-  containing `=`, and multi-line quoted values such as PEM keys.
+  comments (also after a quoted value), `pass#word`, single vs double quoting
+  with escapes, values containing `=`, multi-line quoted values such as PEM
+  keys, and a UTF-8 byte-order mark. An unterminated quote or an unquoted
+  multi-line PEM block is reported as a syntax error instead of being
+  guessed at.
 - **Three output formats** — human text, JSON for tooling, and GitHub Actions
   workflow commands that annotate the diff directly.
 - **Meaningful exit codes** — `0` clean, `1` findings, `2` usage error.
@@ -88,9 +91,9 @@ issue instead of guessed at.
 
 ## Installation
 
-```bash
-pip install dotenv-doctor
-```
+> **Not on PyPI.** The name `dotenv-doctor` on PyPI belongs to an
+> **unrelated project**; `pip install dotenv-doctor` installs that other
+> package, not this one. Install from this repository instead.
 
 From source:
 
@@ -213,7 +216,9 @@ annotations on the pull request:
 ```yaml
 - name: No credentials committed in the example file
   run: |
-    pip install dotenv-doctor
+    # Not on PyPI (the PyPI name is an unrelated project): install from git,
+    # pinned to a commit you have reviewed.
+    pip install "git+https://github.com/hellpuffyt/dotenv-doctor@<commit-sha>"
     dotenv-doctor --format github --example-only
 ```
 
@@ -232,14 +237,30 @@ To validate a real deployment environment instead, check the actual file:
 ## Security
 
 - **No value is ever printed.** Findings name the key and describe the problem;
-  the value itself never reaches stdout, so running this in CI cannot leak a
-  secret into build logs.
+  the value itself never reaches stdout or stderr, so running this in CI cannot
+  leak a secret into build logs. `tests/test_no_value_leak.py` checks this for
+  every rule, every output format and every parse-error path with
+  secret-shaped values, including fragments of a pasted private key. What *is*
+  printed: key names, line numbers, and for `weak-secret` the value's length
+  or entropy. Parse errors never repeat the offending line, and an invalid
+  "key" (which may be a stray fragment of a secret) is not repeated either.
+- GitHub workflow-command output escapes file names and messages as GitHub
+  documents, so a crafted file name cannot inject extra commands.
 - **Nothing is sent anywhere.** No network access, no telemetry, no runtime
   dependencies.
 - **Credential detection is shape-based**, using published prefix formats. It
   will not catch a credential with no recognisable shape — treat it as a safety
   net, not a guarantee.
 - `.gitignore` excludes `.env` and `.env.*` while keeping `.env.example`.
+
+## Limitations
+
+- Credential detection is shape-based (see Security); secrets in comments of
+  the example file are not inspected.
+- If `.env.example` is absent and `--example` is not given, the contract
+  checks are skipped with a note on stderr; an explicitly given `--example`
+  file that does not exist is a usage error (exit 2).
+- Only UTF-8 input is supported (a BOM is accepted).
 
 ## Roadmap
 

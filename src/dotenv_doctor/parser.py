@@ -100,63 +100,131 @@ def _strip_inline_comment_keep_space(value: str) -> str:
     return "".join(out)
 
 
-def _unquote(raw: str) -> tuple[str, bool]:
-    """Return ``(value, was_quoted)``.
+def _closing_quote(body: str, quote: str) -> int:
+    """Index of the quote that closes ``body`` (the text after the opening
+    quote), or -1. Inside double quotes a backslash escapes the next char."""
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if quote == '"' and char == "\\":
+            index += 2
+            continue
+        if char == quote:
+            return index
+        index += 1
+    return -1
+
+
+def _expand_escapes(body: str) -> str:
+    """Double-quote escapes shared by python-dotenv and docker-compose."""
+    mapping = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+    out: list[str] = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char == "\\" and index + 1 < len(body) and body[index + 1] in mapping:
+            out.append(mapping[body[index + 1]])
+            index += 2
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def _unquote(raw: str) -> tuple[str, bool, str | None]:
+    """Return ``(value, was_quoted, problem)``.
 
     Double quotes allow ``\\n``/``\\t``/``\\"``/``\\\\`` escapes; single quotes
-    are literal. This is the behaviour python-dotenv and docker-compose share.
+    are literal. Text after the closing quote may only be a ``# comment``.
+    ``problem`` describes a malformed quoted value without quoting any of it.
     """
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
-        body = raw[1:-1]
-        if raw[0] == "'":
-            return body, True
-        out: list[str] = []
-        index = 0
-        while index < len(body):
-            char = body[index]
-            if char == "\\" and index + 1 < len(body):
-                nxt = body[index + 1]
-                mapping = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
-                if nxt in mapping:
-                    out.append(mapping[nxt])
-                    index += 2
-                    continue
-            out.append(char)
-            index += 1
-        return "".join(out), True
-    return _strip_inline_comment(raw), False
+    if raw[:1] in ("'", '"'):
+        quote = raw[0]
+        close = _closing_quote(raw[1:], quote)
+        if close < 0:
+            return "", True, "quoted value is never closed"
+        body = raw[1 : close + 1]
+        rest = raw[close + 2 :].strip()
+        problem = None
+        if rest and not rest.startswith("#"):
+            problem = "unexpected text after the closing quote"
+        value = _expand_escapes(body) if quote == '"' else body
+        return value, True, problem
+    return _strip_inline_comment(raw), False, None
 
 
-def _logical_lines(text: str) -> Iterator[tuple[int, str]]:
-    """Yield ``(first_line_number, logical_line)``.
+_PEM_BEGIN = re.compile(r"^-----BEGIN [A-Z0-9 ]+-----")
+_PEM_BODY = re.compile(r"^[A-Za-z0-9+/=]*$|^[A-Za-z-]+: ")
+
+
+def _logical_lines(text: str) -> Iterator[tuple[int, str, str | None]]:
+    """Yield ``(first_line_number, logical_line, problem)``.
 
     A value opened with a quote may span physical lines; joining them here
     keeps multi-line private keys (a very common ``.env`` payload) intact.
+    A quote that is never closed does *not* swallow the rest of the file:
+    only that line is reported and parsing resumes on the next one.
+
+    An *unquoted* PEM block (``KEY=-----BEGIN ... KEY-----`` followed by
+    base64 lines) is consumed as one logical line and reported, so the key
+    material is never misread as further assignments -- whose "key names"
+    would otherwise be echoed in findings.
     """
     physical = text.splitlines()
     index = 0
     while index < len(physical):
         start = index
         line = physical[index]
-        stripped = line.strip()
+        problem: str | None = None
+        stripped = _EXPORT_PREFIX.sub("", line.strip(), count=1)
         if stripped and not stripped.startswith("#") and "=" in stripped:
             _, _, raw_value = stripped.partition("=")
             raw_value = raw_value.strip()
-            if raw_value[:1] in ("'", '"'):
-                quote = raw_value[0]
-                closed = len(raw_value) >= 2 and raw_value.endswith(quote)
-                while not closed and index + 1 < len(physical):
-                    index += 1
-                    line = f"{line}\n{physical[index]}"
-                    closed = physical[index].rstrip().endswith(quote)
-        yield start + 1, line
+            quote = raw_value[:1]
+            if quote in ("'", '"') and _closing_quote(raw_value[1:], quote) < 0:
+                joined = line
+                probe = index
+                closed = False
+                while probe + 1 < len(physical):
+                    probe += 1
+                    joined = f"{joined}\n{physical[probe]}"
+                    _, _, candidate = _EXPORT_PREFIX.sub(
+                        "", joined.strip(), count=1
+                    ).partition("=")
+                    candidate = candidate.strip()
+                    if _closing_quote(candidate[1:], quote) >= 0:
+                        closed = True
+                        break
+                if closed:
+                    line, index = joined, probe
+                else:
+                    problem = "quoted value is never closed"
+            elif _PEM_BEGIN.match(raw_value) and "-----END" not in raw_value:
+                probe = index
+                while probe + 1 < len(physical):
+                    nxt = physical[probe + 1].strip()
+                    if nxt.startswith("-----END"):
+                        probe += 1
+                        break
+                    if not _PEM_BODY.match(nxt):
+                        break
+                    probe += 1
+                line = "\n".join(physical[index : probe + 1])
+                index = probe
+                problem = "unquoted multi-line value; wrap it in double quotes"
+        yield start + 1, line, problem
         index += 1
 
 
 def parse(text: str) -> ParsedFile:
-    """Parse ``.env`` content into entries and issues."""
+    """Parse ``.env`` content into entries and issues.
+
+    Issue messages describe the problem and never contain the line's
+    content, which may be a secret.
+    """
     result = ParsedFile()
-    for line_number, line in _logical_lines(text):
+    text = text.removeprefix("\ufeff")  # a UTF-8 BOM is not part of the first key
+    for line_number, line, problem in _logical_lines(text):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -178,22 +246,36 @@ def parse(text: str) -> ParsedFile:
             result.issues.append(ParseIssue(line_number, line, "empty key"))
             continue
         if not _VALID_KEY.match(key):
+            # The "key" may be a fragment of a secret (e.g. a stray base64
+            # line), so it is deliberately not repeated in the message.
             result.issues.append(
                 ParseIssue(
                     line_number,
                     line,
-                    f"key {key!r} is not a portable environment variable name",
+                    "key is not a portable environment variable name",
                 )
             )
             continue
 
-        value, quoted = _unquote(raw_value.strip())
+        if problem == "quoted value is never closed":
+            result.issues.append(ParseIssue(line_number, line, problem))
+            continue
+
+        value, quoted, value_problem = _unquote(raw_value.strip())
+        if problem is not None:
+            # Unquoted PEM block: keep the entry (the key is present) but
+            # report the portability problem.
+            value = raw_value.strip()
+            result.issues.append(ParseIssue(line_number, line, problem))
+        elif value_problem is not None:
+            result.issues.append(ParseIssue(line_number, line, value_problem))
+            continue
 
         # Decide whether this parser dropped whitespace that some other loader
         # would have kept. Derived from the *original* line, because `stripped`
         # above has already removed the trailing whitespace we are looking for.
         stripped_whitespace = False
-        if not quoted and value:
+        if not quoted and value and problem is None:
             _, _, raw_original = line.partition("=")
             raw_original = raw_original.rstrip("\r\n")
             body = _strip_inline_comment_keep_space(raw_original)
@@ -220,5 +302,5 @@ def parse(text: str) -> ParsedFile:
 
 def parse_file(path: str) -> ParsedFile:
     """Parse a ``.env`` file from disk as UTF-8."""
-    with open(path, encoding="utf-8") as handle:
+    with open(path, encoding="utf-8-sig") as handle:
         return parse(handle.read())

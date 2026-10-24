@@ -121,6 +121,16 @@ def render_json(report: Report) -> str:
     return json.dumps(payload, indent=2)
 
 
+def _escape_data(text: str) -> str:
+    """Escape a workflow-command message (GitHub's documented encoding)."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(text: str) -> str:
+    """Escape a workflow-command property value such as ``file=``."""
+    return _escape_data(text).replace(":", "%3A").replace(",", "%2C")
+
+
 def render_github(report: Report) -> str:
     """GitHub Actions workflow commands, so findings annotate the diff."""
     lines: list[str] = []
@@ -130,7 +140,7 @@ def render_github(report: Report) -> str:
             location = f",line={finding.line_number}" if finding.line_number else ""
             name = f"{finding.key}: " if finding.key else ""
             lines.append(
-                f"::{level} file={file_report.path}{location},"
-                f"title={finding.code}::{name}{finding.message}"
+                f"::{level} file={_escape_property(file_report.path)}{location},"
+                f"title={finding.code}::{_escape_data(name + finding.message)}"
             )
     return "\n".join(lines)

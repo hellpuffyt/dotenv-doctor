@@ -22,6 +22,8 @@ EXIT_OK = 0
 EXIT_FINDINGS = 1
 EXIT_USAGE = 2
 
+DEFAULT_EXAMPLE = ".env.example"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -45,8 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-e",
         "--example",
-        default=".env.example",
-        help="the reference file to compare against (default: .env.example)",
+        default=None,
+        help=(
+            "the reference file to compare against (default: .env.example; "
+            "an explicitly given file must exist)"
+        ),
     )
     parser.add_argument(
         "-f",
@@ -117,14 +122,28 @@ def _emit(report: Report, args: argparse.Namespace) -> None:
         print(render_text(report, colour=colour))
 
 
+def _load(path: Path) -> ParsedFile | None:
+    """Parse a file, reporting unreadable / non-UTF-8 input on stderr without
+    echoing any of its content."""
+    try:
+        return parse_file(str(path))
+    except UnicodeDecodeError as exc:
+        print(f"{path}: not valid UTF-8 (byte offset {exc.start})", file=sys.stderr)
+    except OSError as exc:
+        print(f"{path}: cannot read ({exc.strerror})", file=sys.stderr)
+    return None
+
+
 def _audit_example(args: argparse.Namespace) -> int:
     """Check the example file alone for syntax and committed credentials."""
-    path = Path(args.example)
+    path = Path(args.example or DEFAULT_EXAMPLE)
     if not path.is_file():
-        print(f"no such file: {args.example}", file=sys.stderr)
+        print(f"no such file: {path}", file=sys.stderr)
         return EXIT_USAGE
 
-    parsed = parse_file(str(path))
+    parsed = _load(path)
+    if parsed is None:
+        return EXIT_USAGE
     findings = check_syntax(parsed) + check_example_for_secrets(parsed)
     report = Report([FileReport(str(path), findings)])
     _emit(report, args)
@@ -150,10 +169,24 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     example = ParsedFile()
-    example_path = Path(args.example)
+    example_path = Path(args.example or DEFAULT_EXAMPLE)
     use_example = not args.no_example and example_path.is_file()
+    if not args.no_example and not use_example:
+        if args.example is not None:
+            # An explicitly named contract that does not exist must not be
+            # silently skipped: the run would "pass" without checking it.
+            print(f"no such file: {args.example}", file=sys.stderr)
+            return EXIT_USAGE
+        print(
+            f"note: {DEFAULT_EXAMPLE} not found; example-contract checks skipped "
+            "(pass --no-example to silence this)",
+            file=sys.stderr,
+        )
     if use_example:
-        example = parse_file(str(example_path))
+        loaded = _load(example_path)
+        if loaded is None:
+            return EXIT_USAGE
+        example = loaded
 
     report = Report()
 
@@ -169,7 +202,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"no such file: {target}", file=sys.stderr)
             return EXIT_USAGE
 
-        parsed = parse_file(str(path))
+        parsed = _load(path)
+        if parsed is None:
+            return EXIT_USAGE
         findings = check_syntax(parsed) + check_values(parsed, ignore=ignore)
         if use_example:
             findings += check_against_example(parsed, example, ignore=ignore)
