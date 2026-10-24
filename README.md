@@ -100,6 +100,7 @@ From source:
 ```bash
 git clone https://github.com/hellpuffyt/dotenv-doctor
 cd dotenv-doctor
+python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
