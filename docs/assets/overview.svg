@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="470" viewBox="0 0 1200 470" role="img" aria-labelledby="t d">
+  <title id="t">dotenv-doctor data flow</title>
+  <desc id="d">cli.py reads the .env files and the .env.example contract. parser.py turns each file into entries and parse issues. checks.py runs four pure rule functions: check_syntax, check_values, check_against_example and check_example_for_secrets. report.py renders the findings as text, JSON or GitHub workflow commands, and cli.py exits 0, 1 or 2. Findings carry the key, line, code and message, never the value.</desc>
+  <rect width="1200" height="470" fill="#0C0D0D"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A3AAA6"/></marker>
+  </defs>
+  <g font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" fill="#A3AAA6" font-size="13">
+    <text x="40" y="44" fill="#EEEAE2" font-size="20" font-weight="600">dotenv-doctor: from .env text to findings and an exit code</text>
+    <text x="40" y="68">Four modules in src/dotenv_doctor/. cli.py is the only one that touches the filesystem; the rules are pure functions.</text>
+  </g>
+  <g fill="#17191A" stroke="#2A2E2D" stroke-width="1.5">
+    <rect x="40" y="110" width="190" height="96" rx="8"/>
+    <rect x="40" y="236" width="190" height="96" rx="8"/>
+    <rect x="280" y="110" width="220" height="222" rx="8"/>
+    <rect x="550" y="96" width="320" height="56" rx="8"/>
+    <rect x="550" y="162" width="320" height="56" rx="8"/>
+    <rect x="550" y="228" width="320" height="56" rx="8"/>
+    <rect x="550" y="294" width="320" height="56" rx="8" stroke="#3FBF8A"/>
+    <rect x="920" y="110" width="240" height="120" rx="8"/>
+    <rect x="920" y="252" width="240" height="98" rx="8"/>
+  </g>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#EEEAE2">
+    <text x="56" y="138">.env files</text>
+    <text x="56" y="264">.env.example</text>
+    <text x="296" y="138">parser.py</text>
+    <text x="566" y="120">check_syntax</text>
+    <text x="566" y="186">check_values</text>
+    <text x="566" y="252">check_against_example</text>
+    <text x="566" y="318" fill="#3FBF8A">check_example_for_secrets</text>
+    <text x="936" y="138">report.py</text>
+    <text x="936" y="280">cli.py exit code</text>
+  </g>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#A3AAA6">
+    <text x="56" y="162">positional args,</text>
+    <text x="56" y="180">default ./.env</text>
+    <text x="56" y="288">the contract,</text>
+    <text x="56" y="306">set with --example</text>
+    <text x="296" y="162">export prefixes</text>
+    <text x="296" y="182">single / double quotes</text>
+    <text x="296" y="202">escapes, inline comments</text>
+    <text x="296" y="222">multi-line quoted PEM</text>
+    <text x="296" y="242">UTF-8 BOM</text>
+    <text x="296" y="276" fill="#EEEAE2">ParsedFile</text>
+    <text x="296" y="296">entries + parse issues</text>
+    <text x="296" y="316">(ambiguity is an issue)</text>
+    <text x="566" y="140">syntax, duplicate-key</text>
+    <text x="566" y="206">placeholder-value, weak-secret, …</text>
+    <text x="566" y="272">missing-key, undocumented-key</text>
+    <text x="566" y="338">secret-in-example (9 shapes)</text>
+    <text x="936" y="162">render_text</text>
+    <text x="936" y="182">render_json</text>
+    <text x="936" y="202">render_github  ::error …</text>
+    <text x="936" y="304">0  clean</text>
+    <text x="936" y="322">1  findings (--strict: any)</text>
+    <text x="936" y="340">2  usage error</text>
+  </g>
+  <g stroke="#A3AAA6" stroke-width="1.5" fill="none">
+    <path d="M870,124 L895,124 L895,322 L870,322"/>
+    <path d="M870,190 L895,190"/>
+    <path d="M870,256 L895,256"/>
+  </g>
+  <g stroke="#A3AAA6" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M230,158 L278,158"/>
+    <path d="M230,284 L278,284"/>
+    <path d="M500,221 L526,221 L526,124 L548,124"/>
+    <path d="M526,190 L548,190"/>
+    <path d="M526,256 L548,256"/>
+    <path d="M526,221 L526,322 L548,322"/>
+    <path d="M895,170 L918,170"/>
+    <path d="M1040,230 L1040,250"/>
+  </g>
+  <g fill="#17191A" stroke="#2A2E2D" stroke-width="1.5" stroke-dasharray="5 4">
+    <rect x="40" y="378" width="1120" height="64" rx="8"/>
+  </g>
+  <g font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#A3AAA6">
+    <text x="56" y="404"><tspan fill="#EEEAE2">A Finding is code, severity, key, line and message.</tspan> The value stops at checks.py and is never rendered, so the tool can run in CI logs.</text>
+    <text x="56" y="426">check_example_for_secrets runs on the example file only; --example-only runs check_syntax plus that rule and nothing else.</text>
+  </g>
+</svg>
