@@ -8,13 +8,11 @@ configuration mistakes that otherwise only show up after a deploy.
 
 [Case study ↗](https://hellpuff.dev/work/dotenv-doctor)
 
-<img src="docs/assets/overview.svg" width="100%" alt="Data flow diagram: cli.py reads .env files and .env.example, parser.py turns them into entries and parse issues, four rule functions in checks.py produce findings, report.py renders text, JSON or GitHub output, and cli.py exits 0, 1 or 2.">
-
 **Status:** version 0.1.0, beta. Python 3.10 or newer, no runtime
 dependencies. CI runs the test suite on Linux, macOS and Windows with Python
 3.10 to 3.13. Not published to PyPI (see [Installation](#installation)).
 
-## What is it?
+## Demo
 
 A dependency-free CLI that reads your `.env` files and tells you what is wrong
 with them before your application does. Given this `.env` next to the
@@ -41,6 +39,11 @@ $ echo $?
 
 A `-` in place of a line number means the finding is about the file as a
 whole: a key that should be present and is not.
+
+<img src="docs/screenshots/check-env-against-example.png" width="100%" alt="Terminal capture: cat .env, then dotenv-doctor reporting a missing DATABASE_URL, a placeholder API_KEY and an undocumented LEGACY_FLAG, exit code 1, and the same findings as GitHub workflow commands.">
+
+*Terminal capture of the run above (real output, rendered from the saved
+transcript), followed by `--format github` on the same file.*
 
 ## Why does it exist?
 
@@ -85,6 +88,10 @@ your real environment and the contract your repository publishes.
 - **Exit codes CI can branch on:** `0` clean, `1` findings, `2` usage error.
 
 ## Architecture
+
+<img src="docs/assets/overview.svg" width="100%" alt="Data flow diagram: cli.py reads .env files and .env.example, parser.py turns them into entries and parse issues, four rule functions in checks.py produce findings, report.py renders text, JSON or GitHub output, and cli.py exits 0, 1 or 2.">
+
+*Diagram of the data flow between the four modules.*
 
 Four modules, each testable on its own:
 
